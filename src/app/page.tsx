@@ -1,40 +1,53 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Fuse from "fuse.js";
 
 export default function Home() {
   const [advocates, setAdvocates] = useState([]);
   const [filteredAdvocates, setFilteredAdvocates] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    console.log("fetching advocates...");
-    fetch("/api/advocates").then((response) => {
-      response.json().then((jsonResponse) => {
+    setLoading(true);
+    setError(null);
+
+    fetch("/api/advocates")
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Error: ${response.status} ${response.statusText}`);
+        }
+        return response.json();
+      })
+      .then((jsonResponse) => {
         setAdvocates(jsonResponse.data);
         setFilteredAdvocates(jsonResponse.data);
-      });
+      })
+      .catch((err) => {
+        setError(err.message || "Something went wrong");
+      })
+    .finally(() => {
+      setLoading(false);   // Loading finished
     });
   }, []);
 
-  const onChange = (e) => {
-    const searchTerm = e.target.value;
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setFilteredAdvocates(advocates);
+      return;
+    }
 
-    document.getElementById("search-term").innerHTML = searchTerm;
-
-    console.log("filtering advocates...");
-    const filteredAdvocates = advocates.filter((advocate) => {
-      return (
-        advocate.firstName.includes(searchTerm) ||
-        advocate.lastName.includes(searchTerm) ||
-        advocate.city.includes(searchTerm) ||
-        advocate.degree.includes(searchTerm) ||
-        advocate.specialties.includes(searchTerm) ||
-        advocate.yearsOfExperience.includes(searchTerm)
-      );
+    const fuse = new Fuse(advocates, {
+      keys: ["firstName", "lastName", "city", "degree", "specialties", "yearsOfExperience"],
+      threshold: 0.3 // smaller = more strict, bigger = fuzzier
     });
 
-    setFilteredAdvocates(filteredAdvocates);
-  };
+    const results = fuse.search(searchTerm).map(r => r.item);
+    setFilteredAdvocates(results);
+  }, [searchTerm, advocates]);
 
   const onClick = () => {
     console.log(advocates);
@@ -42,50 +55,66 @@ export default function Home() {
   };
 
   return (
-    <main style={{ margin: "24px" }}>
-      <h1>Solace Advocates</h1>
-      <br />
-      <br />
-      <div>
-        <p>Search</p>
-        <p>
-          Searching for: <span id="search-term"></span>
-        </p>
-        <input style={{ border: "1px solid black" }} onChange={onChange} />
-        <button onClick={onClick}>Reset Search</button>
-      </div>
-      <br />
-      <br />
-      <table>
-        <thead>
-          <th>First Name</th>
-          <th>Last Name</th>
-          <th>City</th>
-          <th>Degree</th>
-          <th>Specialties</th>
-          <th>Years of Experience</th>
-          <th>Phone Number</th>
-        </thead>
-        <tbody>
-          {filteredAdvocates.map((advocate) => {
-            return (
+    <main className="p-6">
+      <h1 className="text-2xl font-bold">Solace Advocates</h1>
+
+      {loading && (
+        <div className="flex justify-center items-center h-screen">
+    <div className="spinner" role="status" aria-label="Loading"></div>
+  </div>
+      )}
+      {error && <p className="text-red-600">Error: {error}</p>}
+
+      {!loading && !error && (
+        <>
+          <div className="mt-4 flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="Search advocates..."
+              className="border px-3 py-2 rounded"
+              onChange={(e) => setSearchTerm(e.target.value)}
+              value={searchTerm}
+            />
+            <button className="bg-gray-200 px-4 py-2 rounded" onClick={() => setSearchTerm("")}>
+              Reset
+            </button>
+          </div>
+          <table className="mt-6 border-collapse w-full text-sm">
+            <thead className="bg-gray-100 sticky top-0">
               <tr>
-                <td>{advocate.firstName}</td>
-                <td>{advocate.lastName}</td>
-                <td>{advocate.city}</td>
-                <td>{advocate.degree}</td>
-                <td>
-                  {advocate.specialties.map((s) => (
-                    <div>{s}</div>
-                  ))}
-                </td>
-                <td>{advocate.yearsOfExperience}</td>
-                <td>{advocate.phoneNumber}</td>
+                <th className="p-2 border">First Name</th>
+                <th className="p-2 border">Last Name</th>
+                <th className="p-2 border">City</th>
+                <th className="p-2 border">Degree</th>
+                <th className="p-2 border">Specialties</th>
+                <th className="p-2 border">Years of Experience</th>
+                <th className="p-2 border">Phone Number</th>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            </thead>
+            <tbody>
+              {filteredAdvocates.length ? (
+                filteredAdvocates.map((adv, idx) => (
+                  <tr key={idx} className="hover:bg-gray-50">
+                    <td className="p-2 border">{adv.firstName}</td>
+                    <td className="p-2 border">{adv.lastName}</td>
+                    <td className="p-2 border">{adv.city}</td>
+                    <td className="p-2 border">{adv.degree}</td>
+                    <td className="p-2 border">{adv.specialties.join(", ")}</td>
+                    <td className="p-2 border">{adv.yearsOfExperience}</td>
+                    <td className="p-2 border">{adv.phoneNumber}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="7" className="text-center p-4">
+                    No results found
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </>
+      )}
     </main>
   );
 }
